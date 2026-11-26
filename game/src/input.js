@@ -1,6 +1,6 @@
-// Keyboard and mouse input for a flight game. Held keys give continuous controls (pitch, roll,
-// throttle); one-shot presses (start or restart, pause) are queued as bit flags and taken once by
-// the loop, so a press between two frames is never lost and never counted twice.
+// Keyboard and mouse input. Held keys give continuous controls — pitch, roll, throttle — while
+// one-shot presses (start or restart, pause) are queued as bit flags and taken once by the loop, so
+// a press between two frames is neither lost nor counted twice.
 
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
@@ -14,9 +14,12 @@ const THROTTLE_DOWN = new Set(['ControlLeft', 'ControlRight', 'Minus']);
 const CONFIRM = new Set(['Space', 'Enter']);
 const PAUSE = new Set(['KeyP', 'Escape']);
 
+/** Everything the game needs to know about what the player is doing right now. */
 export function createInput(target) {
   const held = new Set();
   let actions = 0;
+  let mouseX = null;
+  let mouseY = null;
 
   function down(code) {
     if (CONFIRM.has(code)) {
@@ -39,14 +42,12 @@ export function createInput(target) {
   window.addEventListener('keyup', (event) => {
     held.delete(event.code);
   });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
+  // A key released while the tab is hidden never sends keyup, so let go of everything on blur.
   window.addEventListener('blur', () => {
     held.clear();
   });
-  // Mouse: horizontal position steers roll, vertical position steers pitch, when the pointer is
-  // over the canvas. A click confirms (start or restart).
-  let mouseX = null;
-  let mouseY = null;
+  // Mouse: horizontal position steers roll, vertical steers pitch, while the pointer is over the
+  // canvas. A click confirms (start or restart).
   target.addEventListener('pointermove', (event) => {
     const rect = target.getBoundingClientRect();
     mouseX = (event.clientX - rect.left) / rect.width;
@@ -60,22 +61,21 @@ export function createInput(target) {
     mouseY = null;
   });
 
+  // A pointer position (0..1) as -1..1 about the centre, or 0 when the pointer has left.
   const centre = (value) => (value === null ? 0 : Math.max(-1, Math.min(1, value * 2 - 1)));
-  const hasAny = (set) => Array.from(held).some((k) => set.has(k));
+  const hasAny = (set) => Array.from(held).some((key) => set.has(key));
 
   return {
-    /** Roll: -1 left, 1 right, from the arrow keys or the mouse's horizontal position. */
+    /** Roll: -1 left, 1 right, from the arrow keys, else the mouse's horizontal position. */
     roll() {
       const fromKeys = (hasAny(RIGHT) ? 1 : 0) - (hasAny(LEFT) ? 1 : 0);
-      const a = fromKeys !== 0 ? fromKeys : centre(mouseX);
-      return Math.max(-1, Math.min(1, a));
+      return Math.max(-1, Math.min(1, fromKeys !== 0 ? fromKeys : centre(mouseX)));
     },
-    /** Pitch: -1 nose down, 1 nose up, from the arrow keys or the mouse's vertical position. */
+    /** Pitch: -1 nose down, 1 nose up, from the arrow keys, else the mouse's vertical position. */
     pitch() {
       const fromKeys = (hasAny(UP) ? 1 : 0) - (hasAny(DOWN) ? 1 : 0);
       const fromMouse = mouseY === null ? 0 : Math.max(-1, Math.min(1, mouseY * 2 - 1));
-      const a = fromKeys !== 0 ? fromKeys : -fromMouse;
-      return Math.max(-1, Math.min(1, a));
+      return Math.max(-1, Math.min(1, fromKeys !== 0 ? fromKeys : -fromMouse));
     },
     /** Throttle: -1 idle, 1 full, from the shift and control keys. */
     throttle() {

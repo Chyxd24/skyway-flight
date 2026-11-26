@@ -1,5 +1,6 @@
-// A small seeded random number generator (mulberry32): the same seed gives the same game,
-// which is what makes the screenshot scenes repeatable.
+// A seeded pseudo-random number generator (mulberry32). Hand it the same seed and it yields the
+// same sequence every run, which is what lets the procedural world — and so every screenshot —
+// come out identical twice.
 
 export function createRandom(seed) {
   let a = seed | 0;

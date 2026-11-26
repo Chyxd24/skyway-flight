@@ -1,47 +1,40 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (bank toward the next
-// ring, ease the nose to its altitude, hold a cruising throttle), so the frame is what a short
-// flight really looks like and the same seed always gives the same frame.
-import { PLANE, RINGS, STEP } from './config.js';
+// The three screenshot scenes behind ?shot=start|play|end. Each plays the real rules forward from a
+// fresh world for an exact number of fixed simulation ticks — never a wall-clock interval — steered
+// by a small autopilot (bank toward the next ring, ease the nose onto its altitude, hold a cruising
+// throttle). The same seed therefore always gives the same frame, byte for byte.
+import { RINGS, STEP } from './config.js';
 import { ringAt } from './world.js';
 import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 
-const START_SECONDS = 4;
-const PLAY_SECONDS = 30;
-const END_SECONDS = 90;
+// Fixed tick counts, not seconds: START_SECONDS / STEP and so on, resolved once.
+const START_TICKS = Math.round(4 / STEP);
+const PLAY_TICKS = Math.round(30 / STEP);
+const END_TICKS = Math.round(90 / STEP);
 
-/** Simple autopilot: bank and pitch toward the next ring, hold cruise throttle. */
+/** A steady hand for the screenshot flights: bank and pitch toward the next ring, hold cruise. */
 function autopilot(state) {
   if (state.nextRing >= RINGS.count) return { pitch: -0.2, roll: 0, throttle: 0.4 };
   const ring = ringAt(state.nextRing);
-  const dx = ring.x - state.x;
-  const dz = ring.z - state.z;
-  const wantedHeading = Math.atan2(dx, dz);
+  const wantedHeading = Math.atan2(ring.x - state.x, ring.z - state.z);
   let headingError = wantedHeading - state.heading;
   while (headingError > Math.PI) headingError -= Math.PI * 2;
   while (headingError < -Math.PI) headingError += Math.PI * 2;
   const roll = Math.max(-1, Math.min(1, headingError * 1.6));
-  const wantedAlt = ring.y;
-  const altError = wantedAlt - state.y;
-  const pitch = Math.max(-0.4, Math.min(0.5, altError / 600));
+  const pitch = Math.max(-0.4, Math.min(0.5, (ring.y - state.y) / 600));
   return { pitch, roll, throttle: 0.6 };
 }
 
 /**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
+ * Set `world` to the named scene (start, play or end; anything else means start) by stepping it the
+ * scene's fixed number of ticks, and return the screen to draw over it and the best score to show.
  */
 export function stageShot(name, world) {
   world.reset();
   if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, { pitch: 0.15, roll: 0, throttle: 0.6 });
+    for (let tick = 0; tick < START_TICKS; tick += 1) world.step(STEP, { pitch: 0.15, roll: 0, throttle: 0.6 });
     return { screen: SCREEN_TITLE, best: 0 };
   }
-  const limit = name === 'end' ? END_SECONDS : PLAY_SECONDS;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    const controls = autopilot(world.state);
-    world.step(STEP, controls);
-  }
-  const over = world.state.over;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: Math.round(world.state.score) };
+  const ticks = name === 'end' ? END_TICKS : PLAY_TICKS;
+  for (let tick = 0; tick < ticks; tick += 1) world.step(STEP, autopilot(world.state));
+  return { screen: world.state.over ? SCREEN_OVER : SCREEN_PLAY, best: Math.round(world.state.score) };
 }
